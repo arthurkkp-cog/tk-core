@@ -749,7 +749,7 @@ class SsoSaml2Core(object):
                 "<p>"
             )
             auth_dialog = UsernamePasswordDialog(message=message % self._session.host)
-            if auth_dialog.exec_():
+            if auth_dialog.exec():
                 authenticator.setUser(auth_dialog.username)
                 authenticator.setPassword(auth_dialog.password)
             else:
@@ -832,7 +832,7 @@ class SsoSaml2Core(object):
             loop = QtCore.QEventLoop(self._dialog)
             self._dialog.finished.connect(loop.exit)
             self.on_renew_sso_session()
-            status = loop.exec_()
+            status = loop.exec()
             self._login_status = self._login_status or status
             return self._login_status
 
@@ -845,7 +845,7 @@ class SsoSaml2Core(object):
         self._view.page().load(url)
 
         self._dialog.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        status = self._dialog.exec_()
+        status = self._dialog.exec()
         self._login_status = self._login_status or status
         return self._login_status
 

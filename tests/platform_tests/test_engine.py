@@ -255,7 +255,7 @@ class TestExecuteInMainThread(TestEngineBase):
             )
         )
         t.start()
-        self._app.exec_()
+        self._app.exec()
         t.join()
 
     def _assert_run_in_main_thread_and_quit(self):
@@ -350,7 +350,7 @@ class TestExecuteInMainThread(TestEngineBase):
 
         t = threading.Thread(target=lambda: wait_for_threads_and_quit(threads))
         t.start()
-        QtCore.QCoreApplication.instance().exec_()
+        QtCore.QCoreApplication.instance().exec()
 
 
 class TestContextChange(TestEngineBase):

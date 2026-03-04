@@ -142,7 +142,7 @@ def main():
     login_dialog = UsernamePasswordDialog(window_title=window_title, message=message)
     login_dialog.username = "TheUsername"
     login_dialog.password = "ThePassword"
-    if login_dialog.exec_():
+    if login_dialog.exec():
         print("Username: %s" % login_dialog.username)
         print("Password: %s" % login_dialog.password)
     else:
