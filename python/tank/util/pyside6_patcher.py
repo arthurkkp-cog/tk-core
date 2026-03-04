@@ -8,10 +8,13 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
+import logging
 import types
 import warnings
 
 from .pyside2_patcher import PySide2Patcher
+
+logger = logging.getLogger(__name__)
 
 
 class PySide6Patcher(PySide2Patcher):
@@ -344,19 +347,25 @@ class PySide6Patcher(PySide2Patcher):
                     if not case_sensitivity and nargs > 1:
                         case_sensitivity = args[1]
 
-                    # FIXME can we port pattern syntax?
                     pattern_syntax = kwargs.get("syntax")
                     if not pattern_syntax and nargs > 2:
                         pattern_syntax = args[2]
 
+                    # Convert the pattern based on QRegExp.PatternSyntax
+                    pattern = args[0]
+                    if pattern_syntax is not None:
+                        pattern = QRegularExpression._convert_pattern_syntax(
+                            pattern, pattern_syntax, original_QRegularExpression,
+                        )
+
                     if case_sensitivity is None:
-                        original_QRegularExpression.__init__(self, args[0])
+                        original_QRegularExpression.__init__(self, pattern)
                     else:
                         if case_sensitivity == original_QRegularExpression.CaseInsensitiveOption:
                             opts = original_QRegularExpression.CaseInsensitiveOption
                         else:
                             opts = original_QRegularExpression.NoPatternOption
-                        original_QRegularExpression.__init__(self, args[0], options=opts)
+                        original_QRegularExpression.__init__(self, pattern, options=opts)
 
                 self.isEmpty = lambda *args, **kwargs: QRegularExpression.isEmpty(self, *args, **kwargs)
                 self.indexIn = lambda *args, **kwargs: QRegularExpression.indexIn(self, *args, **kwargs)
@@ -372,13 +381,61 @@ class PySide6Patcher(PySide2Patcher):
                 return not re.pattern()
 
             @staticmethod
+            def _convert_pattern_syntax(pattern, syntax, orig_cls):
+                """Convert a QRegExp pattern syntax to a QRegularExpression pattern.
+
+                :param pattern: The regex pattern string.
+                :param syntax: The QRegExp.PatternSyntax enum value.
+                :param orig_cls: The original QRegularExpression class.
+                :returns: The converted pattern string.
+                """
+                # QRegExp.PatternSyntax values:
+                #   RegExp = 0, RegExp2 = 3  -> Perl-compatible (no conversion needed)
+                #   Wildcard = 1, WildcardUnix = 4 -> shell glob
+                #   FixedString = 2 -> literal string
+                #   W3CXmlSchema11 = 5 -> XML Schema (best-effort: treat as regex)
+                if syntax in (0, 3):
+                    # RegExp / RegExp2: default Perl-compatible regex
+                    return pattern
+                elif syntax in (1, 4):
+                    # Wildcard / WildcardUnix: convert glob to regex
+                    if hasattr(orig_cls, "wildcardToRegularExpression"):
+                        return orig_cls.wildcardToRegularExpression(pattern)
+                    # Manual conversion fallback
+                    converted = []
+                    for ch in pattern:
+                        if ch == "*":
+                            converted.append(".*")
+                        elif ch == "?":
+                            converted.append(".")
+                        elif ch in r"\.^$+{}[]|()":
+                            converted.append("\\" + ch)
+                        else:
+                            converted.append(ch)
+                    return "".join(converted)
+                elif syntax == 2:
+                    # FixedString: escape the pattern so it matches literally
+                    if hasattr(orig_cls, "escape"):
+                        return orig_cls.escape(pattern)
+                    return __import__("re").escape(pattern)
+                else:
+                    logger.warning(
+                        "Unsupported QRegExp.PatternSyntax value %s. "
+                        "Pattern will be used as-is.",
+                        syntax,
+                    )
+                    return pattern
+
+            @staticmethod
             def indexIn(re, subject, offset=0):
                 """Patch the QRegExp indexIn method."""
 
                 if offset < 0:
+                    re._last_match = None
                     return -1
 
                 re_match = re.match(subject, offset)
+                re._last_match = re_match
                 start = re_match.capturedStart(0)
                 return start
 
@@ -395,32 +452,26 @@ class PySide6Patcher(PySide2Patcher):
 
             @staticmethod
             def matchedLength(re):
-                """
-                This cannot be patched.
-
-                Requires regular expression itself to have state, when regular expressions
-                now return QRegularExpressionMatch objects.
-                """
+                """Return the length of the last match, or -1 if no match."""
+                last = getattr(re, "_last_match", None)
+                if last is not None and last.hasMatch():
+                    return last.capturedLength(0)
                 return -1
 
             @staticmethod
-            def pos(re, n):
-                """
-                This cannot be patched.
-
-                Requires regular expression itself to have state, when regular expressions
-                now return QRegularExpressionMatch objects.
-                """
+            def pos(re, n=0):
+                """Return the start position of capture group *n* in the last match."""
+                last = getattr(re, "_last_match", None)
+                if last is not None and last.hasMatch():
+                    return last.capturedStart(n)
                 return -1
 
             @staticmethod
-            def cap(re, n):
-                """
-                This cannot be patched.
-
-                Requires regular expression itself to have state, when regular expressions
-                now return QRegularExpressionMatch objects.
-                """
+            def cap(re, n=0):
+                """Return the text of capture group *n* from the last match."""
+                last = getattr(re, "_last_match", None)
+                if last is not None and last.hasMatch():
+                    return last.captured(n)
                 return ""
 
         QtCore.QRegularExpression.isEmpty = QRegularExpression.isEmpty
