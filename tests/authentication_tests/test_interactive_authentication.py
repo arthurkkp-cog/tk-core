@@ -590,14 +590,14 @@ class InteractiveTests(ShotgunTestBase):
         # Test window close event
         with self._login_dialog() as ld:
             # First, simulate user clicks on the No button
-            ld.confirm_box.exec_ = lambda: QtGui.QMessageBox.StandardButton.No
+            ld.confirm_box.exec = lambda: QtGui.QMessageBox.StandardButton.No
 
             self.assertEqual(ld.close(), False)
             self.assertIsNone(ld.my_result)
             self.assertEqual(ld.isVisible(), True)
 
             # Then, simulate user clicks on the Yes button
-            ld.confirm_box.exec_ = lambda: QtGui.QMessageBox.StandardButton.Yes
+            ld.confirm_box.exec = lambda: QtGui.QMessageBox.StandardButton.Yes
 
             self.assertEqual(ld.close(), True)
             self.assertEqual(ld.my_result, QtGui.QDialog.Rejected)
@@ -615,14 +615,14 @@ class InteractiveTests(ShotgunTestBase):
             )
 
             # First, simulate user clicks on the No button
-            ld.confirm_box.exec_ = lambda: QtGui.QMessageBox.StandardButton.No
+            ld.confirm_box.exec = lambda: QtGui.QMessageBox.StandardButton.No
 
             self.assertIsNone(ld.keyPressEvent(event))
             self.assertIsNone(ld.my_result)
             self.assertEqual(ld.isVisible(), True)
 
             # Then, simulate user clicks on the Yes button
-            ld.confirm_box.exec_ = lambda: QtGui.QMessageBox.StandardButton.Yes
+            ld.confirm_box.exec = lambda: QtGui.QMessageBox.StandardButton.Yes
 
             # Initialize the ASL process - mostly for coverage
             ld._asl_process("https://host.shotgunstudio.com")
@@ -709,7 +709,7 @@ class InteractiveTests(ShotgunTestBase):
 
         with mock.patch.object(
             QtGui.QDialog,
-            "exec_",
+            "exec",
             return_value=QtGui.QDialog.Accepted,
         ), self._login_dialog(
             is_session_renewal=True,
@@ -808,7 +808,7 @@ class InteractiveTests(ShotgunTestBase):
 
         with mock.patch.object(
             QtGui.QDialog,
-            "exec_",
+            "exec",
             return_value=QtGui.QDialog.Accepted,
         ), self._login_dialog(
             is_session_renewal=True,
@@ -1049,7 +1049,7 @@ class InteractiveTests(ShotgunTestBase):
             },
         ), mock.patch.object(
             QtGui.QDialog,
-            "exec_",
+            "exec",
             return_value=QtGui.QDialog.Accepted,
         ), self._login_dialog(
             is_session_renewal=True,

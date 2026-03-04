@@ -348,9 +348,7 @@ class LoginDialog(QtGui.QDialog):
         self._query_task.wait()
 
     def _confirm_exit(self):
-        return self.confirm_box.exec_() == QtGui.QMessageBox.StandardButton.Yes
-        # PySide uses "exec_" instead of "exec" because "exec" is a reserved
-        # keyword in Python 2.
+        return self.confirm_box.exec() == QtGui.QMessageBox.StandardButton.Yes
 
     def closeEvent(self, event):
         if not self._confirm_exit():
@@ -637,15 +635,15 @@ class LoginDialog(QtGui.QDialog):
         """
         self.ui.message.setText(message)
 
-    def exec_(self):
+    def exec(self):
         """
         Displays the window modally.
         """
-        # This fixes a weird bug on Qt where calling show() and exec_() might lead
+        # This fixes a weird bug on Qt where calling show() and exec() might lead
         # to having an invisible modal QDialog and this state freezes the host
         # application. (Require a `pkill -9 applicationName`). The fix in our case
         # is pretty simple, we just have to not call show() before the call to
-        # exec_() since it implicitly call exec_().
+        # exec() since it implicitly call exec().
 
         self.raise_()
         self.activateWindow()
@@ -656,7 +654,7 @@ class LoginDialog(QtGui.QDialog):
         # to freeze, so only set the WindowStaysOnTopHint flag as this appears to not disable the
         # other flags.
         self.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-        return QtGui.QDialog.exec_(self)
+        return super().exec()
 
     def result(self):
         """
@@ -682,7 +680,7 @@ class LoginDialog(QtGui.QDialog):
 
             return self._sso_saml2.get_session_data()
 
-        res = self.exec_()
+        res = self.exec()
         if res != QtGui.QDialog.Accepted:
             return
 
