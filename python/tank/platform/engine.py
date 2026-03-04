@@ -1928,7 +1928,7 @@ class Engine(TankBundle):
         )
 
         # finally launch it, modal state
-        status = dialog.exec_()
+        status = dialog.exec()
 
         # lastly, return the instantiated widget
         return (status, widget)

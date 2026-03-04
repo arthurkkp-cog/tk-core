@@ -257,7 +257,7 @@ class PySide2Patcher(object):
                     if button & buttons:
                         msg_box.addButton(button)
                 msg_box.setDefaultButton(defaultButton)
-                msg_box.exec_()
+                msg_box.exec()
                 return msg_box.standardButton(msg_box.clickedButton())
 
             try:
