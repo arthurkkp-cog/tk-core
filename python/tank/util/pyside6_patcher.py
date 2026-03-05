@@ -347,7 +347,7 @@ class PySide6Patcher(PySide2Patcher):
                     nargs = len(args)
 
                     case_sensitivity = kwargs.get("cs")
-                    if not case_sensitivity and nargs > 1:
+                    if case_sensitivity is None and nargs > 1:
                         case_sensitivity = args[1]
 
                     # Map old QRegExp.PatternSyntax enum values to
@@ -359,7 +359,7 @@ class PySide6Patcher(PySide2Patcher):
                     #       QRegularExpression.escape()
                     #   QRegExp.W3CXmlSchema11 -> not supported, log warning
                     pattern_syntax = kwargs.get("syntax")
-                    if not pattern_syntax and nargs > 2:
+                    if pattern_syntax is None and nargs > 2:
                         pattern_syntax = args[2]
 
                     pattern = args[0]
@@ -378,7 +378,6 @@ class PySide6Patcher(PySide2Patcher):
                             else:
                                 # Manual fallback: escape everything except
                                 # glob chars and translate them.
-                                import re as _re
                                 pattern = original_QRegularExpression.escape(pattern)
                                 pattern = pattern.replace(r"\*", ".*")
                                 pattern = pattern.replace(r"\?", ".")
