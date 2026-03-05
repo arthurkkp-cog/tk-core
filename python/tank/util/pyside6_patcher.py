@@ -8,10 +8,13 @@
 # agreement to the Shotgun Pipeline Toolkit Source Code License. All rights
 # not expressly granted therein are reserved by Shotgun Software Inc.
 
+import logging
 import types
 import warnings
 
 from .pyside2_patcher import PySide2Patcher
+
+logger = logging.getLogger(__name__)
 
 
 class PySide6Patcher(PySide2Patcher):
@@ -335,28 +338,68 @@ class PySide6Patcher(PySide2Patcher):
 
         class QRegularExpression(original_QRegularExpression):
             def __init__(self, *args, **kwargs):
+                # Initialize last match state to None; will be set by indexIn.
+                self._last_match = None
+
                 if not args:
                     original_QRegularExpression.__init__(self)
                 else:
                     nargs = len(args)
 
                     case_sensitivity = kwargs.get("cs")
-                    if not case_sensitivity and nargs > 1:
+                    if case_sensitivity is None and nargs > 1:
                         case_sensitivity = args[1]
 
-                    # FIXME can we port pattern syntax?
+                    # Map old QRegExp.PatternSyntax enum values to
+                    # QRegularExpression equivalents:
+                    #   QRegExp.RegExp / RegExp2 -> default (Perl-compatible)
+                    #   QRegExp.Wildcard / WildcardUnix -> convert via
+                    #       wildcardToRegularExpression()
+                    #   QRegExp.FixedString -> escape the pattern with
+                    #       QRegularExpression.escape()
+                    #   QRegExp.W3CXmlSchema11 -> not supported, log warning
                     pattern_syntax = kwargs.get("syntax")
-                    if not pattern_syntax and nargs > 2:
+                    if pattern_syntax is None and nargs > 2:
                         pattern_syntax = args[2]
 
+                    pattern = args[0]
+                    if pattern_syntax is not None:
+                        # Values from Qt4/Qt5 QRegExp::PatternSyntax enum
+                        _RegExp = 0
+                        _RegExp2 = 3
+                        _Wildcard = 1
+                        _WildcardUnix = 4
+                        _FixedString = 2
+                        _W3CXmlSchema11 = 5
+
+                        if pattern_syntax in (_Wildcard, _WildcardUnix):
+                            if hasattr(original_QRegularExpression, "wildcardToRegularExpression"):
+                                pattern = original_QRegularExpression.wildcardToRegularExpression(pattern)
+                            else:
+                                # Manual fallback: escape everything except
+                                # glob chars and translate them.
+                                pattern = original_QRegularExpression.escape(pattern)
+                                pattern = pattern.replace(r"\*", ".*")
+                                pattern = pattern.replace(r"\?", ".")
+                        elif pattern_syntax == _FixedString:
+                            pattern = original_QRegularExpression.escape(pattern)
+                        elif pattern_syntax == _W3CXmlSchema11:
+                            logger.warning(
+                                "QRegExp.W3CXmlSchema11 pattern syntax is "
+                                "not supported by QRegularExpression. The "
+                                "pattern will be used as-is."
+                            )
+                        # _RegExp and _RegExp2 are Perl-compatible and need
+                        # no conversion.
+
                     if case_sensitivity is None:
-                        original_QRegularExpression.__init__(self, args[0])
+                        original_QRegularExpression.__init__(self, pattern)
                     else:
                         if case_sensitivity == original_QRegularExpression.CaseInsensitiveOption:
                             opts = original_QRegularExpression.CaseInsensitiveOption
                         else:
                             opts = original_QRegularExpression.NoPatternOption
-                        original_QRegularExpression.__init__(self, args[0], options=opts)
+                        original_QRegularExpression.__init__(self, pattern, options=opts)
 
                 self.isEmpty = lambda *args, **kwargs: QRegularExpression.isEmpty(self, *args, **kwargs)
                 self.indexIn = lambda *args, **kwargs: QRegularExpression.indexIn(self, *args, **kwargs)
@@ -373,12 +416,19 @@ class PySide6Patcher(PySide2Patcher):
 
             @staticmethod
             def indexIn(re, subject, offset=0):
-                """Patch the QRegExp indexIn method."""
+                """Patch the QRegExp indexIn method.
+
+                Stores the resulting QRegularExpressionMatch on the instance
+                as ``_last_match`` so that subsequent calls to
+                ``matchedLength``, ``pos`` and ``cap`` can read from it.
+                """
 
                 if offset < 0:
+                    re._last_match = None
                     return -1
 
                 re_match = re.match(subject, offset)
+                re._last_match = re_match
                 start = re_match.capturedStart(0)
                 return start
 
@@ -395,32 +445,38 @@ class PySide6Patcher(PySide2Patcher):
 
             @staticmethod
             def matchedLength(re):
-                """
-                This cannot be patched.
+                """Return the length of the last match stored by ``indexIn``.
 
-                Requires regular expression itself to have state, when regular expressions
-                now return QRegularExpressionMatch objects.
+                Reads from ``_last_match`` set by the most recent ``indexIn``
+                call.  Returns -1 if there is no previous match or the last
+                match was unsuccessful.
                 """
+                if re._last_match is not None and re._last_match.hasMatch():
+                    return re._last_match.capturedLength(0)
                 return -1
 
             @staticmethod
-            def pos(re, n):
-                """
-                This cannot be patched.
+            def pos(re, n=0):
+                """Return the position of capture group *n* from the last match.
 
-                Requires regular expression itself to have state, when regular expressions
-                now return QRegularExpressionMatch objects.
+                Reads from ``_last_match`` set by the most recent ``indexIn``
+                call.  Returns -1 if there is no previous match or the last
+                match was unsuccessful.
                 """
+                if re._last_match is not None and re._last_match.hasMatch():
+                    return re._last_match.capturedStart(n)
                 return -1
 
             @staticmethod
-            def cap(re, n):
-                """
-                This cannot be patched.
+            def cap(re, n=0):
+                """Return the text of capture group *n* from the last match.
 
-                Requires regular expression itself to have state, when regular expressions
-                now return QRegularExpressionMatch objects.
+                Reads from ``_last_match`` set by the most recent ``indexIn``
+                call.  Returns an empty string if there is no previous match
+                or the last match was unsuccessful.
                 """
+                if re._last_match is not None and re._last_match.hasMatch():
+                    return re._last_match.captured(n)
                 return ""
 
         QtCore.QRegularExpression.isEmpty = QRegularExpression.isEmpty
@@ -428,6 +484,7 @@ class PySide6Patcher(PySide2Patcher):
         QtCore.QRegularExpression.matchedLength = QRegularExpression.matchedLength
         QtCore.QRegularExpression.setCaseSensitivity = QRegularExpression.setCaseSensitivity
         QtCore.QRegularExpression.pos = QRegularExpression.pos
+        QtCore.QRegularExpression.cap = QRegularExpression.cap
 
         # This pattern matching flag is obsolete now.
         QtCore.QRegularExpression.FixedString = None
